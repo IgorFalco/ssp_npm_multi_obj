@@ -1,5 +1,7 @@
 import csv
 import os
+import pandas as pd
+import matplotlib.pyplot as plt
 
 
 def save_pareto_wall(solution, filepath):
@@ -54,3 +56,13 @@ def save_solutions(solution, filepath):
                 solution.objectives.get("tool_switchs")
             ]
             writer.writerow(row)
+
+def plot_pareto_wall(filepath):
+
+    df = pd.read_csv(os.path.join(filepath, "pareto_wall.csv"))
+    plt.plot(df['makespan'], df['flowtime'], '--*')
+    plt.xlabel("Makespan")
+    plt.ylabel("Flowtime")
+    plt.title("Pareto Wall")
+    plt.grid(True)
+    plt.show()
