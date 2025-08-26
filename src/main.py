@@ -1,69 +1,47 @@
-import pandas as pd
-import numpy as np
 import os
 
-from functions.evaluation import GPCA, calculate_flowtime
-from models.instance import Instance
-from models.machine import Machine
+# Supondo que suas classes e funções estão organizadas em pastas
+from models.solution import Solution
+from models.pareto_wall import ParetoWall
+from functions.evaluation import (
+    calculate_all_metrics, 
+    get_total_tool_switches, 
+    get_total_flowtime, 
+    get_system_makespan
+)
+from functions.input import (
+    read_problem_instance
+)
 
+# --- CONFIGURAÇÃO ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-filepath = os.path.join(BASE_DIR, "instances/SSP-NPM-I")
-os.makedirs(filepath, exist_ok=True)
+INSTANCE_FILEPATH = os.path.join(BASE_DIR, "instances/SSP-NPM-I")
+RESULTS_FILEPATH = os.path.join(BASE_DIR, "results")
+os.makedirs(RESULTS_FILEPATH, exist_ok=True)
 
-params = {
-    "similarity_percentage": 0.8
-}
+pareto_csv_path = os.path.join(RESULTS_FILEPATH, "pareto_wall.csv")
+plot_image_path = os.path.join(RESULTS_FILEPATH, "pareto_wall_plot.png")
 
-def read_problem_instance(filepath, filename):
+pareto_wall = ParetoWall(objectives_keys=["makespan", "flowtime"])
 
-    df = pd.read_csv(os.path.join(filepath, filename), header=None, sep=';')
+for i in range(1000):
 
-    num_machines, num_jobs, num_tools = df.iloc[0, :3].dropna().astype(int).to_list()
-    magazine_capacities = df.iloc[1, :num_machines].dropna().astype(int).to_list()
-    tool_change_costs = df.iloc[2, :num_machines].dropna().astype(int).to_list()
+    problem = read_problem_instance(INSTANCE_FILEPATH, "ins1_m=2_j=10_t=10_var=1.csv")
+    calculate_all_metrics(problem)
+    objectives = {
+        "tool_switches": get_total_tool_switches(problem),
+        "flowtime": get_total_flowtime(problem),
+        "makespan": get_system_makespan(problem)
+    }
 
-    machines = []
-
-    for i in range(num_machines):
-        tasks_cost = df.iloc[3 + i, :num_jobs].dropna().astype(int).to_list()
-        machine = Machine(
-            capacity=magazine_capacities[i],
-            tool_change_cost=tool_change_costs[i],
-            tasks_cost=tasks_cost
-        )
-        machines.append(machine)
-
-    tools_requirements_matrix = df.iloc[3 + num_machines:, :num_jobs].dropna(axis=1).astype(int).values
-
-    problem = Instance(
-        machines=machines,
-        num_jobs=num_jobs,
-        num_tools=num_tools,
-        tools_requirements_matrix=tools_requirements_matrix,
-        params = params,
+    new_solution = Solution(
+        instance=problem, 
+        solution_id=i + 1, 
+        objectives=objectives
     )
-    return problem
 
-problem = read_problem_instance(filepath, "ins1_m=2_j=10_t=10_var=1.csv")
+    pareto_wall.add(new_solution)
 
-print("**************************************************")
-print("Tool Switches:" , GPCA(problem))
-print("Flowtime:" , calculate_flowtime(problem))
-
-for i in range(2):
-    machine = problem.machines[i]
-    
-    # Usa uma "List Comprehension" para criar uma nova lista de jobs "limpa"
-    # onde todos os valores numéricos são convertidos para int.
-    cleaned_jobs = [
-        {
-            'id': int(job['id']), 
-            'tools': {int(tool) for tool in job['tools']}
-        } 
-        for job in machine.jobs
-    ]
-    
-    # Imprime o resultado formatado
-    print(f"Jobs na Máquina {machine.id}:")
-    print(cleaned_jobs)
-    print("-" * 20) # Apenas um separador para clareza
+print(f"\nProcesso finalizado. Fronteira de Pareto final contém {len(pareto_wall)} soluções.")
+pareto_wall.save_to_csv(pareto_csv_path)
+pareto_wall.plot(save_path=plot_image_path)

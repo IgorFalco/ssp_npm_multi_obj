@@ -4,7 +4,8 @@ from functions.evaluation import find_best_machine_min_tsj, find_most_similar_jo
 
 class Instance:
 
-    def __init__(self, machines, num_jobs, num_tools, tools_requirements_matrix, params):
+    def __init__(self, name, machines, num_jobs, num_tools, tools_requirements_matrix):
+        self.name = name
         self.num_jobs = num_jobs
         self.num_tools = num_tools
         self.machines = machines
@@ -16,7 +17,7 @@ class Instance:
 
         # Chamadas dos métodos internos
         self._initialize_jobs()
-        self._construct_similarity_matrix(params["similarity_percentage"])
+        self._construct_similarity_matrix()
         self._construct_initial_solution()
 
 
@@ -33,7 +34,7 @@ class Instance:
             for job_idx in range(self.num_jobs)
         ]
 
-    def _construct_similarity_matrix(self, similarity_percentage):
+    def _construct_similarity_matrix(self):
         # Cria a matriz de similiradidade multiplicando a matriz de requisitos pela sua 
         matrix_T = self.tools_requirements_matrix.T
 
