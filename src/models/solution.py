@@ -1,9 +1,9 @@
 class Solution:
 
-    def __init__(self, instance, solution_id, machines, objectives):
+    def __init__(self, instance, solution_id, objectives):
         self.instance = instance
         self.solution_id = solution_id
-        self.machines = machines
+        self.machines = instance.machines
         self.objectives = objectives
 
     def dominates(self, other):

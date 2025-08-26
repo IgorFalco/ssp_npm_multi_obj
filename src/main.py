@@ -1,6 +1,8 @@
 import pandas as pd
+import numpy as np
 import os
 
+from functions.evaluation import GPCA, calculate_flowtime
 from models.instance import Instance
 from models.machine import Machine
 
@@ -8,6 +10,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 filepath = os.path.join(BASE_DIR, "instances/SSP-NPM-I")
 os.makedirs(filepath, exist_ok=True)
 
+params = {
+    "similarity_percentage": 0.8
+}
 
 def read_problem_instance(filepath, filename):
 
@@ -35,15 +40,30 @@ def read_problem_instance(filepath, filename):
         num_jobs=num_jobs,
         num_tools=num_tools,
         tools_requirements_matrix=tools_requirements_matrix,
+        params = params,
     )
-
     return problem
 
+problem = read_problem_instance(filepath, "ins1_m=2_j=10_t=10_var=1.csv")
 
-instance = read_problem_instance(filepath, "ins1_m=2_j=10_t=10_var=1.csv")
+print("**************************************************")
+print("Tool Switches:" , GPCA(problem))
+print("Flowtime:" , calculate_flowtime(problem))
 
-print(f"Objeto do problema: {instance}")
-print(f"Número de Jobs: {instance.num_jobs}")
-print(f"Capacidade da máquina 1: {instance.machines[0].capacity}")
-print(f"Custo da tarefa 0 na máquina 2: {instance.machines[1].tasks_cost[0]}")
-print(f"Matriz de uso de ferramentas (primeiras 5 linhas):\n{instance.tools_requirements_matrix[:5,:]}")
+for i in range(2):
+    machine = problem.machines[i]
+    
+    # Usa uma "List Comprehension" para criar uma nova lista de jobs "limpa"
+    # onde todos os valores numéricos são convertidos para int.
+    cleaned_jobs = [
+        {
+            'id': int(job['id']), 
+            'tools': {int(tool) for tool in job['tools']}
+        } 
+        for job in machine.jobs
+    ]
+    
+    # Imprime o resultado formatado
+    print(f"Jobs na Máquina {machine.id}:")
+    print(cleaned_jobs)
+    print("-" * 20) # Apenas um separador para clareza
