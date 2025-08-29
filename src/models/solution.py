@@ -7,6 +7,7 @@ class Solution:
             m.id: [job['id'] for job in m.jobs] for m in instance.machines
         }
         self.objectives = objectives
+        self.crowding_distance = 0
 
     def __repr__(self):
         return (f"Solution(ID: {self.solution_id}, "

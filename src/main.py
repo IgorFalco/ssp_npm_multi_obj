@@ -1,47 +1,33 @@
 import os
-
-# Supondo que suas classes e funções estão organizadas em pastas
-from models.solution import Solution
 from models.pareto_wall import ParetoWall
-from functions.evaluation import (
-    calculate_all_metrics, 
-    get_total_tool_switches, 
-    get_total_flowtime, 
-    get_system_makespan
-)
-from functions.input import (
-    read_problem_instance
-)
+from functions.input import read_problem_instance
+from functions.metaheuristics import iterated_local_search # <-- A grande chamada
 
 # --- CONFIGURAÇÃO ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-INSTANCE_FILEPATH = os.path.join(BASE_DIR, "instances/SSP-NPM-I")
+INSTANCE_FILEPATH = os.path.join(BASE_DIR, "instances/SSP-NPM-II")
 RESULTS_FILEPATH = os.path.join(BASE_DIR, "results")
 os.makedirs(RESULTS_FILEPATH, exist_ok=True)
+
+# --- EXECUÇÃO PRINCIPAL ---
+
+# 1. Lê a instância base UMA VEZ
+problem_instance = read_problem_instance(INSTANCE_FILEPATH, "ins480_m=4_j=60_t=120_sw=h_dens=d_var=20.csv")
+
+# 2. Roda a meta-heurística completa
+final_pareto_front = iterated_local_search(
+    instance=problem_instance,
+    max_iterations=1000,
+    initial_pop_size=50,
+    archive_size=10,
+    perturbation_strength=2
+)
+
+# 3. Salva e plota o resultado final
+print(f"\nProcesso finalizado. Fronteira de Pareto final contém {len(final_pareto_front)} soluções.")
 
 pareto_csv_path = os.path.join(RESULTS_FILEPATH, "pareto_wall.csv")
 plot_image_path = os.path.join(RESULTS_FILEPATH, "pareto_wall_plot.png")
 
-pareto_wall = ParetoWall(objectives_keys=["makespan", "flowtime"])
-
-for i in range(1000):
-
-    problem = read_problem_instance(INSTANCE_FILEPATH, "ins1_m=2_j=10_t=10_var=1.csv")
-    calculate_all_metrics(problem)
-    objectives = {
-        "tool_switches": get_total_tool_switches(problem),
-        "flowtime": get_total_flowtime(problem),
-        "makespan": get_system_makespan(problem)
-    }
-
-    new_solution = Solution(
-        instance=problem, 
-        solution_id=i + 1, 
-        objectives=objectives
-    )
-
-    pareto_wall.add(new_solution)
-
-print(f"\nProcesso finalizado. Fronteira de Pareto final contém {len(pareto_wall)} soluções.")
-pareto_wall.save_to_csv(pareto_csv_path)
-pareto_wall.plot(save_path=plot_image_path)
+final_pareto_front.save_to_csv(pareto_csv_path)
+final_pareto_front.plot(save_path=plot_image_path)

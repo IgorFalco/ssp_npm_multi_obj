@@ -5,8 +5,9 @@ import matplotlib.pyplot as plt
 
 class ParetoWall:
 
-    def __init__(self, objectives_keys=["makespan", "flowtime"]):
-        self._solutions = set()
+    def __init__(self, max_size=10, objectives_keys=["makespan", "flowtime"]):
+        self.max_size = max_size
+        self._solutions = []
         self.objectives_keys = objectives_keys
     
     def __len__(self):
@@ -41,15 +42,56 @@ class ParetoWall:
 
     
     def add(self, new_solution):
-        obj_x, obj_y = self.objectives_keys[0], self.objectives_keys[1]
 
-        if any(existing.dominates_on_axes(new_solution, obj_x, obj_y) for existing in self._solutions):
-            return False
+        if any(existing.dominates_on_axes(new_solution, *self.objectives_keys) for existing in self._solutions):
+            return
         
-        dominated_by_new = {s for s in self._solutions if new_solution.dominates_on_axes(s, obj_x, obj_y)}
-        self._solutions -= dominated_by_new
-        self._solutions.add(new_solution)
+        self._solutions = [s for s in self._solutions if not new_solution.dominates_on_axes(s, *self.objectives_keys)]
+        if new_solution not in self._solutions:
+            self._solutions.append(new_solution)
+        else:
+            return False
+        if len(self._solutions) > self.max_size:
+            self._trim_by_crowding_distance()
+
         return True
+
+    def _trim_by_crowding_distance(self):
+        """
+        Calcula a distância de aglomeração e remove a solução com a menor distância
+        (a que está na região mais congestionada da fronteira).
+        """
+        if len(self._solutions) < 3:
+            return # Não faz sentido calcular para 2 ou menos pontos
+
+        # Reseta a distância de cada solução
+        for s in self._solutions:
+            s.crowding_distance = 0
+
+        # Calcula a distância para cada objetivo
+        for key in self.objectives_keys:
+            # Ordena as soluções pelo objetivo atual
+            self._solutions.sort(key=lambda s: s.objectives[key])
+            
+            min_val = self._solutions[0].objectives[key]
+            max_val = self._solutions[-1].objectives[key]
+            val_range = max_val - min_val
+            if val_range == 0: continue
+
+            # Os extremos da fronteira são os mais importantes, damos distância infinita
+            self._solutions[0].crowding_distance = float('inf')
+            self._solutions[-1].crowding_distance = float('inf')
+            
+            # Calcula a distância para os pontos intermediários
+            for i in range(1, len(self._solutions) - 1):
+                distance = self._solutions[i+1].objectives[key] - self._solutions[i-1].objectives[key]
+                self._solutions[i].crowding_distance += distance / val_range
+        
+        # Ordena a lista pela distância (menor primeiro)
+        self._solutions.sort(key=lambda s: s.crowding_distance)
+        
+        # Remove o primeiro elemento, que é o que tem a menor distância (o mais congestionado)
+        self._solutions.pop(0)
 
     def get_solutions(self):
         return self._solutions
@@ -57,13 +99,9 @@ class ParetoWall:
     def save_to_csv(self, filepath):
         header = ["instance", "solution_id", "makespan", "flowtime", "tool_switches"]
 
-        file_exists = os.path.isfile(filepath)
-
         with open(filepath, mode="w", newline="") as f:
             writer = csv.writer(f)
-
-            if not file_exists:
-                writer.writerow(header)
+            writer.writerow(header)
             
             for solution in self._solutions:    
                 row = [

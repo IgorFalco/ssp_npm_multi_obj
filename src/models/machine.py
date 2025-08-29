@@ -15,7 +15,7 @@ class Machine:
         self.magazine = set()
 
         self.tool_switches = 0
-        self.flow_time = 0
+        self.flowtime = 0
         self.makespan = 0
 
     def __repr__(self):

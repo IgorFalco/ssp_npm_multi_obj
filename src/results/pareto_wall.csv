@@ -1,3 +1,9 @@
-ins1_m=2_j=10_t=10_var=1.csv,629,42,154,5
-ins1_m=2_j=10_t=10_var=1.csv,378,47,152,4
-ins1_m=2_j=10_t=10_var=1.csv,498,40,165,5
+instance,solution_id,makespan,flowtime,tool_switches
+ins160_m=3_j=20_t=20_var=20.csv,iter_3,69,,9
+ins160_m=3_j=20_t=20_var=20.csv,iter_23,62,,10
+ins160_m=3_j=20_t=20_var=20.csv,iter_74,53,,12
+ins160_m=3_j=20_t=20_var=20.csv,iter_80,51,,13
+ins160_m=3_j=20_t=20_var=20.csv,iter_109,60,,11
+ins160_m=3_j=20_t=20_var=20.csv,iter_368,48,,14
+ins160_m=3_j=20_t=20_var=20.csv,iter_545,45,,15
+ins160_m=3_j=20_t=20_var=20.csv,iter_814,82,,8
