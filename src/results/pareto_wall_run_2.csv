@@ -1,0 +1,9 @@
+instance,solution_id,tool_switches,makespan
+ins160_m=3_j=20_t=20_var=20.csv,iter_88,7,110
+ins160_m=3_j=20_t=20_var=20.csv,iter_33,8,88
+ins160_m=3_j=20_t=20_var=20.csv,iter_4,9,86
+ins160_m=3_j=20_t=20_var=20.csv,iter_36,10,64
+ins160_m=3_j=20_t=20_var=20.csv,iter_30,11,63
+ins160_m=3_j=20_t=20_var=20.csv,iter_26,12,53
+ins160_m=3_j=20_t=20_var=20.csv,iter_72,13,51
+ins160_m=3_j=20_t=20_var=20.csv,iter_97,14,49

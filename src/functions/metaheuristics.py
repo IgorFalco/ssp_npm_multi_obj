@@ -5,7 +5,7 @@ from functions.evaluation import calculate_all_metrics, get_total_tool_switches,
 from functions.local_search import variable_neighborhood_descent
 from functions.neighborhoods import perturbation_insertion
 
-def iterated_local_search(instance, max_iterations=1000, initial_pop_size=100, archive_size=10, perturbation_strength=2, obj_x="tool_switches", obj_y="makespan"):
+def iterated_local_search(instance, max_iterations=100, initial_pop_size=100, archive_size=10, perturbation_strength=2, obj_x="tool_switches", obj_y="makespan"):
     """
     Executa a meta-heurística Iterated Local Search (ILS) multiobjetivo.
 
