@@ -6,13 +6,13 @@ from functions.metaheuristics import iterated_local_search  # <-- A grande chama
 
 # --- CONFIGURAÇÃO ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-INSTANCE_FILEPATH = os.path.join(BASE_DIR, "instances/SSP-NPM-I")
+INSTANCE_FILEPATH = os.path.join(BASE_DIR, "../instances/SSP-NPM-II")
 RESULTS_FILEPATH = os.path.join(BASE_DIR, "results")
 os.makedirs(RESULTS_FILEPATH, exist_ok=True)
 
 num_runs = 10
 all_final_paretos = []  # Lista para guardar o resultado de cada uma das 10 execuções
-instance_filename = "ins160_m=3_j=20_t=20_var=20.csv"
+instance_filename = "ins640_m=6_j=120_t=120_sw=h_dens=d_var=20.csv"
 
 # --- EXECUÇÃO PRINCIPAL ---
 
