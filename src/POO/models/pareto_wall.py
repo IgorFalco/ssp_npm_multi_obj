@@ -178,5 +178,3 @@ def plot_combined_pareto(pareto_walls, save_path=None):
     if save_path:
         plt.savefig(save_path)
         print(f"Gráfico combinado salvo em: {save_path}")
-
-    plt.show()

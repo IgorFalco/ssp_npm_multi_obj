@@ -67,7 +67,7 @@ def calculate_tool_switches_all_machines(job_assignment, tools_requirements_matr
     tool_switches = np.zeros(len(magazines_capacities), dtype=np.int64)
 
     for machine_id in range(len(magazines_capacities)):
-        machine_jobs = np.where(job_assignment[machine_id] != -1)[0]
+        machine_jobs = job_assignment[machine_id][job_assignment[machine_id] != -1]
         tool_switches[machine_id] = calculate_tool_switches_for_machine(
             machine_jobs, tools_requirements_matrix, magazines_capacities[machine_id]
         )
@@ -81,7 +81,7 @@ def find_best_machine_min_tsj(job_assignment, tools_requirements_matrix, magazin
     ratios = np.full(num_machines, np.inf, dtype=np.float64)
 
     for machine_id in range(len(magazines_capacities)):
-        machine_jobs = np.where(job_assignment[machine_id] != -1)[0]
+        machine_jobs = job_assignment[machine_id][job_assignment[machine_id] != -1]
         num_jobs = len(machine_jobs)
 
         if num_jobs > 0:
@@ -99,14 +99,14 @@ def find_best_machine_min_tsj(job_assignment, tools_requirements_matrix, magazin
 
 @njit
 def find_most_similar_job(machine_id, job_assignment, jobs_list, similarity_matrix):
-    machine_jobs = np.where(job_assignment[machine_id] != -1)[0]
+    machine_jobs = job_assignment[machine_id][job_assignment[machine_id] != -1]
     if len(machine_jobs) == 0:
         return None
 
     available_jobs = [job for job in jobs_list if job != -1]
     if not available_jobs:
         return None
-
+    
     last_job_id = machine_jobs[-1]
     best_job = available_jobs[0]
     best_similarity = similarity_matrix[last_job_id, best_job]
@@ -130,7 +130,7 @@ def construct_initial_solution(num_jobs, num_machines, magazines_capacities, too
     for i in range(num_machines):
         for j, job in enumerate(jobs_list):
             if job != -1 and check_machine_eligibility(job, i, magazines_capacities, tools_per_job):
-                job_assignment[i, job] = 1
+                job_assignment[i, 0] = job
                 jobs_list[j] = -1
                 break
 
@@ -150,7 +150,8 @@ def construct_initial_solution(num_jobs, num_machines, magazines_capacities, too
                 break
 
             if check_machine_eligibility(most_similar_job_id, target_machine, magazines_capacities, tools_per_job):
-                job_assignment[target_machine, most_similar_job_id] = 1
+                pos = np.where(job_assignment[target_machine] == -1)[0][0]
+                job_assignment[target_machine, pos] = most_similar_job_id
                 jobs_list[np.where(jobs_list == most_similar_job_id)[
                     0][0]] = -1
                 remaining_jobs.remove(most_similar_job_id)
@@ -300,7 +301,7 @@ def calculate_makespan_all_machines(job_assignment, tools_requirements_matrix, m
     makespans = np.zeros(len(magazines_capacities), dtype=np.int64)
     
     for machine_id in range(len(magazines_capacities)):
-        machine_jobs = np.where(job_assignment[machine_id] != -1)[0]
+        machine_jobs = job_assignment[machine_id][job_assignment[machine_id] != -1]
         makespans[machine_id] = calculate_makespan_for_machine(
             machine_jobs, 
             tools_requirements_matrix, 
@@ -318,7 +319,7 @@ def calculate_flowtime_all_machines(job_assignment, tools_requirements_matrix, m
     flowtimes = np.zeros(len(magazines_capacities), dtype=np.int64)
     
     for machine_id in range(len(magazines_capacities)):
-        machine_jobs = np.where(job_assignment[machine_id] != -1)[0]
+        machine_jobs = job_assignment[machine_id][job_assignment[machine_id] != -1]
         flowtimes[machine_id] = calculate_flowtime_for_machine(
             machine_jobs, 
             tools_requirements_matrix, 

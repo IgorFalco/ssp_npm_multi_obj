@@ -26,6 +26,8 @@ def read_problem_instance(file_path):
                 :num_jobs].dropna(axis=1).astype(int).values,
         dtype=np.int64)
 
+    tools_per_job = tools_requirements_matrix.sum(axis=0)
+
     return {
         "num_machines": num_machines,
         "num_jobs": num_jobs,
@@ -34,4 +36,5 @@ def read_problem_instance(file_path):
         "tool_change_costs": tool_change_costs,
         "job_cost_per_machine": job_cost_per_machine,
         "tools_requirements_matrix": tools_requirements_matrix,
+        "tools_per_job": tools_per_job,
     }

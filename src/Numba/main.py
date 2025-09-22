@@ -1,63 +1,54 @@
 import os
-import numpy as np
-from functions.ILS import iterated_local_search, multi_start_ils
+import time
+from models.pareto_wall import plot_combined_pareto
+from functions.ILS import iterated_local_search_numba
 from functions.input import read_problem_instance
 
 BASE_DIR = os.path.dirname(__file__)
+RESULTS_FILEPATH = os.path.join(BASE_DIR, "results")
 SSP_NPM_I_PATH = os.path.join(BASE_DIR, "../instances/SSP-NPM-I")
 SSP_NPM_II_PATH = os.path.join(BASE_DIR, "../instances/SSP-NPM-II")
 
-# Teste com instância pequena primeiro
-print("=== TESTE COM INSTÂNCIA PEQUENA ===")
-small_instance = read_problem_instance(os.path.join(SSP_NPM_I_PATH, "ins1_m=2_j=10_t=10_var=1.csv"))
+instance_filename = "ins640_m=6_j=120_t=120_sw=h_dens=d_var=20.csv"
+num_runs = 10
 
-print(f"Instância: {small_instance['num_machines']} máquinas, {small_instance['num_jobs']} jobs")
+start_time = time.time()
 
-# Executa ILS
-result_archive = iterated_local_search(
-    small_instance,
-    max_iterations=20,
-    initial_pop_size=10,
-    archive_size=5,
-    perturbation_strength=2
-)
+print(f"Lendo dados da instância: {instance_filename}")
+instance = read_problem_instance(os.path.join(SSP_NPM_II_PATH, instance_filename))
+all_final_paretos = []
 
-print(f"\nResultados finais:")
-print(f"Soluções não-dominadas encontradas: {len(result_archive.get_solutions())}")
+for i in range(num_runs):
+    print(f"\n--- INICIANDO EXECUÇÃO {i+1}/10 ---")
 
-for i, solution in enumerate(result_archive.get_solutions()):
-    print(f"Solução {i+1}: Tool switches={solution.objectives['tool_switches']}, "
-          f"Makespan={solution.objectives['makespan']}, "
-          f"Flowtime={solution.objectives['flowtime']}")
+    final_pareto_front = iterated_local_search_numba(
+        instance,
+        max_iterations=1000,
+        initial_pop_size=50,
+        archive_size=10,
+        perturbation_strength=2
+    )
 
-print("\n" + "="*50)
-
-# Teste com instância maior
-print("=== TESTE COM INSTÂNCIA MAIOR ===")
-large_instance = read_problem_instance(os.path.join(SSP_NPM_II_PATH, "ins640_m=6_j=120_t=120_sw=h_dens=d_var=20.csv"))
-
-print(f"Instância: {large_instance['num_machines']} máquinas, {large_instance['num_jobs']} jobs")
-
-# Executa Multi-start ILS
-final_archive = multi_start_ils(
-    large_instance,
-    num_runs=3,
-    max_iterations=50,
-    initial_pop_size=30,
-    archive_size=15,
-    perturbation_strength=3
-)
-
-print(f"\nResultados Multi-start:")
-print(f"Soluções não-dominadas encontradas: {len(final_archive.get_solutions())}")
-
-# Salva resultados
-if len(final_archive.get_solutions()) > 0:
-    best_tool_switches = min(s.objectives["tool_switches"] for s in final_archive.get_solutions())
-    best_makespan = min(s.objectives["makespan"] for s in final_archive.get_solutions())
-    best_flowtime = min(s.objectives["flowtime"] for s in final_archive.get_solutions())
+    print(
+        f"Execução {i+1} finalizada. Fronteira contém {len(final_pareto_front)} soluções.")
     
-    print(f"Melhores objetivos encontrados:")
-    print(f"  Tool switches: {best_tool_switches}")
-    print(f"  Makespan: {best_makespan}")
-    print(f"  Flowtime: {best_flowtime}")
+    all_final_paretos.append(final_pareto_front)
+
+    pareto_csv_path = os.path.join(
+        RESULTS_FILEPATH, f"pareto_wall_run_{i+1}.csv")
+    plot_image_path = os.path.join(
+        RESULTS_FILEPATH, f"pareto_plot_run_{i+1}.png")
+
+    # Salva e plota o resultado individual desta execução
+    final_pareto_front.plot(save_path=plot_image_path)
+
+print("\n--- GERANDO GRÁFICO COMBINADO ---")
+
+combined_plot_path = os.path.join( RESULTS_FILEPATH, "pareto_front_combined.png")
+
+plot_combined_pareto(
+    all_final_paretos,
+    save_path=combined_plot_path
+)
+
+print("Tempo de execução: ", time.time() - start_time)

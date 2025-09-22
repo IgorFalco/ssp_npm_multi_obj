@@ -1,278 +1,180 @@
-import numpy as np
 import csv
-from numba import njit
-
-
-@njit
-def dominates_on_objectives(obj1, obj2, obj_indices):
-    """Verifica se obj1 domina obj2 nos objetivos especificados"""
-    better_or_equal = True
-    strictly_better = False
-    
-    for i in obj_indices:
-        if obj1[i] > obj2[i]:
-            better_or_equal = False
-            break
-        elif obj1[i] < obj2[i]:
-            strictly_better = True
-    
-    return better_or_equal and strictly_better
-
-
-@njit
-def calculate_crowding_distances(objectives_matrix):
-    """Calcula distâncias de crowding para um conjunto de soluções"""
-    n_solutions, n_objectives = objectives_matrix.shape
-    distances = np.zeros(n_solutions)
-    
-    for obj_idx in range(n_objectives):
-        # Ordena índices pelos valores do objetivo
-        sorted_indices = np.argsort(objectives_matrix[:, obj_idx])
-        
-        obj_values = objectives_matrix[:, obj_idx]
-        min_val = obj_values[sorted_indices[0]]
-        max_val = obj_values[sorted_indices[-1]]
-        
-        if max_val - min_val == 0:
-            continue
-            
-        # Extremos recebem distância infinita
-        distances[sorted_indices[0]] = np.inf
-        distances[sorted_indices[-1]] = np.inf
-        
-        # Calcula distância para pontos intermediários
-        for i in range(1, n_solutions - 1):
-            idx = sorted_indices[i]
-            prev_idx = sorted_indices[i-1]
-            next_idx = sorted_indices[i+1]
-            
-            distance = (obj_values[next_idx] - obj_values[prev_idx]) / (max_val - min_val)
-            distances[idx] += distance
-    
-    return distances
-
+import pandas as pd
+import matplotlib.pyplot as plt
 
 class ParetoWall:
-    
-    def __init__(self, max_size=10, objectives_keys=["tool_switches", "makespan"]):
+
+    def __init__(self, max_size=10, objectives_keys=["makespan", "flowtime"]):
         self.max_size = max_size
-        self.objectives_keys = objectives_keys
         self._solutions = []
-        self._objectives_cache = np.empty((0, len(objectives_keys)))
-        self._obj_indices = np.arange(len(objectives_keys))
-    
+        self.objectives_keys = objectives_keys
+
     def __len__(self):
         return len(self._solutions)
-    
+
     def __iter__(self):
         return iter(self._solutions)
-    
-    def _update_cache(self):
-        """Atualiza cache de objetivos para operações rápidas"""
+
+    def plot(self, save_path=None):
+
+        x_axis, y_axis = self.objectives_keys[0], self.objectives_keys[1]
+
         if not self._solutions:
-            self._objectives_cache = np.empty((0, len(self.objectives_keys)))
+            print("Nenhuma solução no arquivo para plotar.")
             return
-            
-        n_solutions = len(self._solutions)
-        self._objectives_cache = np.zeros((n_solutions, len(self.objectives_keys)))
-        
-        for i, solution in enumerate(self._solutions):
-            for j, key in enumerate(self.objectives_keys):
-                self._objectives_cache[i, j] = solution.objectives[key]
-    
+
+        data_for_df = [s.objectives for s in self._solutions]
+
+        df = pd.DataFrame(data_for_df)
+        df_sorted = df.sort_values(by=x_axis)
+        plt.plot(df_sorted[x_axis], df_sorted[y_axis], 'o-')
+        plt.xlabel(x_axis.replace('_', ' ').capitalize())
+        plt.ylabel(y_axis.replace('_', ' ').capitalize())
+        plt.title(
+            f"Fronteira de Pareto: {x_axis.replace('_', ' ').capitalize()} vs. {y_axis.replace('_', ' ').capitalize()}")
+        plt.grid(True)
+
+        if save_path:
+            plt.savefig(save_path)
+            print(f"Gráfico salvo em: {save_path}")
+
+        # plt.show()
+
     def add(self, new_solution):
-        """Adiciona nova solução mantendo dominância de Pareto"""
-        if not self._solutions:
+
+        if any(existing.dominates_on_axes(new_solution, *self.objectives_keys) for existing in self._solutions):
+            return
+
+        self._solutions = [s for s in self._solutions if not new_solution.dominates_on_axes(
+            s, *self.objectives_keys)]
+        if new_solution not in self._solutions:
             self._solutions.append(new_solution)
-            self._update_cache()
-            return True
-        
-        new_objectives = np.array([new_solution.objectives[key] for key in self.objectives_keys])
-        
-        # Verifica se nova solução é dominada
-        for i, existing_obj in enumerate(self._objectives_cache):
-            if dominates_on_objectives(existing_obj, new_objectives, self._obj_indices):
-                return False
-        
-        # Remove soluções dominadas pela nova
-        non_dominated = []
-        for i, solution in enumerate(self._solutions):
-            if not dominates_on_objectives(new_objectives, self._objectives_cache[i], self._obj_indices):
-                non_dominated.append(solution)
-        
-        # Adiciona nova solução se não existir
-        if new_solution not in non_dominated:
-            non_dominated.append(new_solution)
-            self._solutions = non_dominated
-            self._update_cache()
-            
-            # Aplica crowding distance se necessário
-            if len(self._solutions) > self.max_size:
-                self._trim_by_crowding_distance()
-            
-            return True
-        
-        return False
-    
+        else:
+            return False
+        if len(self._solutions) > self.max_size:
+            self._trim_by_crowding_distance()
+
+        return True
+
     def _trim_by_crowding_distance(self):
-        """Remove soluções usando crowding distance"""
+        """
+        Calcula a distância de aglomeração e remove a solução com a menor distância
+        (a que está na região mais congestionada da fronteira).
+        """
         if len(self._solutions) < 3:
-            return
-        
-        distances = calculate_crowding_distances(self._objectives_cache)
-        
-        # Encontra índice com menor distância (excluindo infinitos)
-        finite_distances = distances[np.isfinite(distances)]
-        if len(finite_distances) == 0:
-            return
-        
-        min_distance = np.min(finite_distances)
-        candidates = np.where(distances == min_distance)[0]
-        
-        # Remove primeiro candidato com menor distância
-        remove_idx = candidates[0]
-        self._solutions.pop(remove_idx)
-        self._update_cache()
-    
+            return  # Não faz sentido calcular para 2 ou menos pontos
+
+        # Reseta a distância de cada solução
+        for s in self._solutions:
+            s.crowding_distance = 0
+
+        # Calcula a distância para cada objetivo
+        for key in self.objectives_keys:
+            # Ordena as soluções pelo objetivo atual
+            self._solutions.sort(key=lambda s: s.objectives[key])
+
+            min_val = self._solutions[0].objectives[key]
+            max_val = self._solutions[-1].objectives[key]
+            val_range = max_val - min_val
+            if val_range == 0:
+                continue
+
+            # Os extremos da fronteira são os mais importantes, damos distância infinita
+            self._solutions[0].crowding_distance = float('inf')
+            self._solutions[-1].crowding_distance = float('inf')
+
+            # Calcula a distância para os pontos intermediários
+            for i in range(1, len(self._solutions) - 1):
+                distance = self._solutions[i+1].objectives[key] - \
+                    self._solutions[i-1].objectives[key]
+                self._solutions[i].crowding_distance += distance / val_range
+
+        # Ordena a lista pela distância (menor primeiro)
+        self._solutions.sort(key=lambda s: s.crowding_distance)
+
+        # Remove o primeiro elemento, que é o que tem a menor distância (o mais congestionado)
+        self._solutions.pop(0)
+
     def get_solutions(self):
-        """Retorna lista de soluções"""
         return self._solutions
-    
-    def get_best_by_objective(self, objective_key):
-        """Retorna melhor solução para um objetivo específico"""
-        if not self._solutions:
-            return None
-        
-        if objective_key not in self.objectives_keys:
-            return None
-        
-        return min(self._solutions, key=lambda s: s.objectives[objective_key])
-    
-    def get_objectives_matrix(self):
-        """Retorna matriz de objetivos para análises externas"""
-        return self._objectives_cache.copy()
-    
+
     def save_to_csv(self, filepath):
-        """Salva fronteira em CSV"""
-        if not self._solutions:
-            return
-        
-        header = ["solution_id"] + self.objectives_keys
-        
-        with open(filepath, 'w', newline='') as f:
+        """
+        Salva a fronteira de Pareto final em um arquivo CSV.
+        O cabeçalho e as colunas agora são gerados dinamicamente.
+        """
+        # Cria o cabeçalho dinamicamente
+        header = ["instance", "solution_id"] + self.objectives_keys
+
+        with open(filepath, mode="w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(header)
-            
-            # Ordena pelo primeiro objetivo
-            obj_idx = 0
-            sorted_solutions = sorted(self._solutions, 
-                                    key=lambda s: s.objectives[self.objectives_keys[obj_idx]])
-            
+
+            # Ordena as soluções pelo primeiro objetivo (eixo x) antes de salvar
+            sorted_solutions = sorted(
+                self._solutions, key=lambda s: s.objectives[self.objectives_keys[0]])
+
             for solution in sorted_solutions:
-                row = [solution.solution_id]
+                # Cria a linha de dados dinamicamente
+                row = [solution.instance_name, solution.solution_id]
                 for key in self.objectives_keys:
-                    row.append(solution.objectives[key])
+                    row.append(solution.objectives.get(key))
                 writer.writerow(row)
-    
-    def clear(self):
-        """Limpa todas as soluções"""
-        self._solutions.clear()
-        self._update_cache()
-    
-    def merge(self, other_wall):
-        """Mescla com outra ParetoWall"""
-        for solution in other_wall.get_solutions():
-            self.add(solution)
+
+        print(
+            f"Fronteira de Pareto com {len(self)} soluções salva em: {filepath}")
 
 
-def create_combined_pareto_wall(pareto_walls, max_size=50):
-    """Combina múltiplas ParetoWalls em uma única"""
-    if not pareto_walls:
-        return None
-    
-    combined = ParetoWall(max_size=max_size, 
-                         objectives_keys=pareto_walls[0].objectives_keys)
-    
-    for wall in pareto_walls:
-        combined.merge(wall)
-    
-    return combined
-
-
-def plot_combined_pareto(pareto_walls, save_path=None, title="Combined Pareto Fronts"):
+def plot_combined_pareto(pareto_walls, save_path=None):
     """
-    Plota múltiplas fronteiras Pareto combinadas
-    
-    Args:
-        pareto_walls: Lista de ParetoWall objects
-        save_path: Caminho para salvar o gráfico
-        title: Título do gráfico
+    Plota múltiplas fronteiras de Pareto em um único gráfico.
+    Esta versão descobre os eixos X e Y dinamicamente a partir
+    dos dados da solução.
     """
-    import matplotlib.pyplot as plt
-    import numpy as np
-    
-    if not pareto_walls:
-        print("Nenhuma fronteira Pareto fornecida para plotagem")
+    # --- PASSO 1: VERIFICAÇÃO INICIAL ---
+    # Verifica se há algo para plotar
+    if not pareto_walls or not pareto_walls[0].get_solutions():
+        print("Nenhuma solução encontrada para plotar.")
         return
-    
-    plt.figure(figsize=(12, 8))
-    
-    colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown', 
-              'pink', 'gray', 'olive', 'cyan']
-    
-    # Combina todas as fronteiras
-    all_objectives = []
-    
+
+    # --- PASSO 2: DESCOBERTA AUTOMÁTICA DOS EIXOS ---
+    # Pega a primeira solução da primeira fronteira para ver quais objetivos ela tem
+    first_solution = next(iter(pareto_walls[0].get_solutions()))
+    available_objectives = list(first_solution.objectives.keys())
+
+    if len(available_objectives) < 2:
+        print(
+            f"Erro: São necessários pelo menos 2 objetivos para plotar, mas apenas {len(available_objectives)} foram encontrados.")
+        return
+
+    # Define o eixo X e Y como os dois primeiros objetivos encontrados
+    x_axis = available_objectives[0]
+    y_axis = available_objectives[1]
+
+    print(
+        f"Plotando o gráfico com os eixos descobertos: X='{x_axis}', Y='{y_axis}'")
+
+    # --- PASSO 3: PLOTAGEM (LÓGICA EXISTENTE) ---
+    plt.figure(figsize=(10, 8))
+
+    # Itera sobre cada fronteira de Pareto recebida
     for i, wall in enumerate(pareto_walls):
-        if len(wall) == 0:
+        if not wall.get_solutions():
             continue
-            
-        objectives_matrix = wall.get_objectives_matrix()
-        
-        if objectives_matrix.size > 0:
-            color = colors[i % len(colors)]
-            
-            # Plota pontos individuais
-            plt.scatter(objectives_matrix[:, 0], objectives_matrix[:, 1], 
-                       c=color, alpha=0.6, s=50, 
-                       label=f'Run {i+1} ({len(wall)} soluções)')
-            
-            all_objectives.append(objectives_matrix)
-    
-    # Combina todas as soluções para fronteira global
-    if all_objectives:
-        combined_obj = np.vstack(all_objectives)
-        
-        # Encontra fronteira global
-        combined_wall = ParetoWall(max_size=100, 
-                                  objectives_keys=pareto_walls[0].objectives_keys)
-        
-        # Adiciona todas as soluções (simulando)
-        for wall in pareto_walls:
-            combined_wall.merge(wall)
-        
-        if len(combined_wall) > 0:
-            global_objectives = combined_wall.get_objectives_matrix()
-            
-            # Ordena para conectar pontos da fronteira
-            sorted_indices = np.argsort(global_objectives[:, 0])
-            sorted_obj = global_objectives[sorted_indices]
-            
-            plt.plot(sorted_obj[:, 0], sorted_obj[:, 1], 
-                    'k-', linewidth=2, alpha=0.8, 
-                    label=f'Fronteira Global ({len(combined_wall)} soluções)')
-    
-    # Configurações do gráfico
-    objectives_keys = pareto_walls[0].objectives_keys
-    plt.xlabel(objectives_keys[0].replace('_', ' ').title())
-    plt.ylabel(objectives_keys[1].replace('_', ' ').title())
-    plt.title(title)
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    
+
+        data_for_df = [s.objectives for s in wall]
+        df = pd.DataFrame(data_for_df)
+        df_sorted = df.sort_values(by=x_axis)
+
+        plt.plot(df_sorted[x_axis], df_sorted[y_axis],
+                 'o--', label=f'Execução {i + 1}')
+
+    plt.xlabel(x_axis.replace('_', ' ').capitalize())
+    plt.ylabel(y_axis.replace('_', ' ').capitalize())
+    plt.title("Fronteiras de Pareto Combinadas")
+    plt.grid(True)
+    plt.legend()
+
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.savefig(save_path)
         print(f"Gráfico combinado salvo em: {save_path}")
-    
-    plt.show()
