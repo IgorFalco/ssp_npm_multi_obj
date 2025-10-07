@@ -79,6 +79,9 @@ def iterated_local_search_numba(instance_data, max_iterations=100, initial_pop_s
         locally_optimal_solution = variable_neighborhood_descent_numba(
             perturbed_solution, obj_x, obj_y
         )
+
+        if(locally_optimal_solution.objectives["tool_switches"] == 3):
+            print("a")
         
         # 4. ATUALIZAÇÃO COM CONVERGÊNCIA: Adiciona solução otimizada
         pareto_archive.add(locally_optimal_solution)

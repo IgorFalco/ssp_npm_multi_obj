@@ -9,13 +9,13 @@ RESULTS_FILEPATH = os.path.join(BASE_DIR, "results")
 SSP_NPM_I_PATH = os.path.join(BASE_DIR, "../instances/SSP-NPM-I")
 SSP_NPM_II_PATH = os.path.join(BASE_DIR, "../instances/SSP-NPM-II")
 
-instance_filename = "ins640_m=6_j=120_t=120_sw=h_dens=d_var=20.csv"
+instance_filename = "ins1_m=2_j=10_t=10_var=1.csv"
 num_runs = 10
 
 start_time = time.time()
 
 print(f"Lendo dados da instância: {instance_filename}")
-instance = read_problem_instance(os.path.join(SSP_NPM_II_PATH, instance_filename))
+instance = read_problem_instance(os.path.join(SSP_NPM_I_PATH, instance_filename))
 all_final_paretos = []
 
 for i in range(num_runs):

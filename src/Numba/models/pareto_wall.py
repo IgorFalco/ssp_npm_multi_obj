@@ -98,13 +98,13 @@ class ParetoWall:
     def get_solutions(self):
         return self._solutions
 
-    def save_to_csv(self, filepath):
+    def save_to_csv(self, instance_name, filepath, iterations, execution_time):
         """
         Salva a fronteira de Pareto final em um arquivo CSV.
         O cabeçalho e as colunas agora são gerados dinamicamente.
         """
         # Cria o cabeçalho dinamicamente
-        header = ["instance", "solution_id"] + self.objectives_keys
+        header = ["instance", "solution_id", "iterations", "execution_time"] + self.objectives_keys
 
         with open(filepath, mode="w", newline="") as f:
             writer = csv.writer(f)
@@ -116,7 +116,7 @@ class ParetoWall:
 
             for solution in sorted_solutions:
                 # Cria a linha de dados dinamicamente
-                row = [solution.instance_name, solution.solution_id]
+                row = [instance_name, solution.solution_id, iterations, execution_time]
                 for key in self.objectives_keys:
                     row.append(solution.objectives.get(key))
                 writer.writerow(row)
