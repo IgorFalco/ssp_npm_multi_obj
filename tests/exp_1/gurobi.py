@@ -17,6 +17,7 @@ SSP_NPM_I_PATH = os.path.join(BASE_DIR, "../../src/instances/SSP-NPM-I")
 
 # Configurações globais
 MAX_TIME_PER_PAIR = 3600  # 1 hora por par de objetivos (em segundos)
+START_INSTANCE_ID = 52  # Começa a partir da ins51 (inclusive)
 OBJECTIVE_PAIRS = [
     ('TS', 'FMAX'),   # Tool Switches vs Makespan  
     ('TS', 'TFT'),    # Tool Switches vs Total Flow Time
@@ -43,9 +44,11 @@ def solve_instance_gurobi(instance_data, instance_name, max_time_per_pair=3600):
         
         try:
             num_pareto_points = 10  # Número máximo de pontos na fronteira
-            time_per_resolution = 24*3600  # 24 horas = 86400 segundos
+            # Importante: este é o tempo MÁXIMO por resolução do Gurobi,
+            # isto é, por ponto gerado (cada epsilon) e também para os extremos.
+            time_per_resolution = int(max_time_per_pair)
             
-            print(f"   Tempo por resolução: {time_per_resolution//3600}h ({time_per_resolution}s)")
+            print(f"   Tempo por resolução (cada ponto epsilon): {time_per_resolution//60}min ({time_per_resolution}s)")
             print(f"   Pontos estimados: {num_pareto_points}")
             
             # Cria método epsilon constraint
@@ -211,8 +214,19 @@ def main():
     
     # Processa TODAS as instâncias (cada uma terá 1h por par de objetivos)
     test_files = [f for f in files if f.startswith('ins') and f.endswith('.csv')]  # TODAS as instâncias
+    if START_INSTANCE_ID is not None:
+        def _get_instance_id(filename: str) -> int:
+            try:
+                return int(filename.split('_')[0][3:])
+            except Exception:
+                return -1
+
+        test_files = [f for f in test_files if _get_instance_id(f) >= START_INSTANCE_ID]
     
-    print(f"📂 Processando {len(test_files)} instâncias")
+    if START_INSTANCE_ID is not None:
+        print(f"📂 Processando {len(test_files)} instâncias (a partir da ins{START_INSTANCE_ID})")
+    else:
+        print(f"📂 Processando {len(test_files)} instâncias")
     print(f"⏱️  Cada instância: {(MAX_TIME_PER_PAIR * len(OBJECTIVE_PAIRS))//60} minutos")
     
     overall_start_time = time.time()

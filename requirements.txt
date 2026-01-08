@@ -1,4 +1,5 @@
 pandas
 matplotlib
 numba
-gurobipy
+gurobipy>=12.0,<13.0
+pymoo

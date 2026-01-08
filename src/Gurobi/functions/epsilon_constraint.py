@@ -10,13 +10,14 @@ class EpsilonConstraintMethod:
     usando o solver Gurobi.
     """
     
-    def __init__(self, instance_data, time_limit=3600*24):
+    def __init__(self, instance_data, time_limit=3600):
         """
         Inicializa o método epsilon restrito.
         
         Args:
             instance_data (dict): Dados da instância do problema
-            time_limit (int): Limite de tempo em segundos para cada resolução
+            time_limit (int): Limite de tempo (segundos) PARA CADA resolução do Gurobi
+                             (ou seja: por ponto epsilon e também por resolução mono-objetivo).
         """
         self.instance_data = instance_data
         self.time_limit = time_limit
@@ -181,36 +182,42 @@ class EpsilonConstraintMethod:
             dict: Dicionário com os valores dos objetivos ou None se inviável
         """
         model, variables = self.build_base_model()
-        
-        # Define objetivo
-        if objective_name.upper() == 'FMAX':
-            model.setObjective(variables['FMAX'], GRB.MINIMIZE)
-        elif objective_name.upper() == 'TFT':
-            model.setObjective(variables['TFT_expr'], GRB.MINIMIZE)
-        elif objective_name.upper() == 'TS':
-            model.setObjective(variables['TS_expr'], GRB.MINIMIZE)
-        else:
-            raise ValueError("Objective must be 'FMAX', 'TFT', or 'TS'")
-        
-        model.optimize()
-        
-        if model.Status in (GRB.OPTIMAL, GRB.TIME_LIMIT, GRB.SUBOPTIMAL):
+        try:
+            # Define objetivo
+            if objective_name.upper() == 'FMAX':
+                model.setObjective(variables['FMAX'], GRB.MINIMIZE)
+            elif objective_name.upper() == 'TFT':
+                model.setObjective(variables['TFT_expr'], GRB.MINIMIZE)
+            elif objective_name.upper() == 'TS':
+                model.setObjective(variables['TS_expr'], GRB.MINIMIZE)
+            else:
+                raise ValueError("Objective must be 'FMAX', 'TFT', or 'TS'")
+
+            model.optimize()
+
+            if model.Status in (GRB.OPTIMAL, GRB.TIME_LIMIT, GRB.SUBOPTIMAL):
+                try:
+                    return {
+                        'FMAX': float(variables['FMAX'].X),
+                        'TFT': float(variables['TFT_expr'].getValue()),
+                        'TS': float(variables['TS_expr'].getValue()),
+                        'status': int(model.Status),
+                        'iterations': model.IterCount if hasattr(model, 'IterCount') else 0, # Somar
+                        'iterations_node': model.NodeCount if hasattr(model, 'NodeCount') else 0, # Somar
+                        'number_of_solutions': model.SolCount if hasattr(model, 'SolCount') else 0,
+                        'gap': float(model.MIPGap) if hasattr(model, 'MIPGap') else 0.0
+                    }
+                except Exception as e:
+                    print(f"    Erro ao extrair valores dos objetivos: {e}")
+                    return None
+
+            return None
+        finally:
+            # Libera memória nativa do Gurobi imediatamente após cada resolução
             try:
-                return {
-                    'FMAX': variables['FMAX'].X,
-                    'TFT': variables['TFT_expr'].getValue(),
-                    'TS': variables['TS_expr'].getValue(),
-                    'status': model.Status,
-                    'iterations': model.IterCount if hasattr(model, 'IterCount') else 0, # Somar
-                    'iterations_node': model.NodeCount if hasattr(model, 'NodeCount') else 0, # Somar
-                    'number_of_solutions': model.SolCount if hasattr(model, 'SolCount') else 0,
-                    'gap': model.MIPGap if hasattr(model, 'MIPGap') else 0.0
-                }
-            except Exception as e:
-                print(f"    Erro ao extrair valores dos objetivos: {e}")
-                return None
-        
-        return None
+                model.dispose()
+            except Exception:
+                pass
 
     def get_objective_ranges(self, selected_objectives=None):
         """
@@ -253,76 +260,82 @@ class EpsilonConstraintMethod:
             dict: Solução encontrada ou None se inviável
         """
         model, variables = self.build_base_model()
-        
-        # Define objetivo principal
-        if primary_objective.upper() == 'FMAX':
-            model.setObjective(variables['FMAX'], GRB.MINIMIZE)
-        elif primary_objective.upper() == 'TFT':
-            model.setObjective(variables['TFT_expr'], GRB.MINIMIZE)
-        elif primary_objective.upper() == 'TS':
-            model.setObjective(variables['TS_expr'], GRB.MINIMIZE)
-        else:
-            raise ValueError("Primary objective must be 'FMAX', 'TFT', or 'TS'")
-        
-        # Adiciona restrições epsilon
-        for obj_name, epsilon_val in epsilon_values.items():
-            if obj_name.upper() == 'FMAX':
-                model.addConstr(variables['FMAX'] <= epsilon_val, 
-                               name=f"epsilon_{obj_name}")
-            elif obj_name.upper() == 'TFT':
-                model.addConstr(variables['TFT_expr'] <= epsilon_val, 
-                               name=f"epsilon_{obj_name}")
-            elif obj_name.upper() == 'TS':
-                model.addConstr(variables['TS_expr'] <= epsilon_val, 
-                               name=f"epsilon_{obj_name}")
-        
-        model.optimize()
-        
-        if model.Status in (GRB.OPTIMAL, GRB.TIME_LIMIT, GRB.SUBOPTIMAL):
-            try:
-                # Extrai solução
-                job_assignment = np.zeros((self.num_machines, self.num_jobs), dtype=np.int32)
-                
-                for j in self.J:
-                    for r in self.R:
-                        for m in self.M:
-                            if variables['x'][j, r, m].X > 0.5:
-                                job_assignment[m-1, j-1] = 1
-                
-                # Valores dos objetivos do Gurobi
-                gurobi_fmax = variables['FMAX'].X
-                gurobi_tft = variables['TFT_expr'].getValue()
-                gurobi_ts = variables['TS_expr'].getValue()
-                
-                # Calcula objetivos usando Numba para verificação
-                makespan, tft, ts = calculate_solution_objectives(
-                    job_assignment,
-                    self.tools_requirements_matrix,
-                    self.magazines_capacities,
-                    self.tool_change_costs,
-                    self.job_cost_per_machine
-                )
+        try:
+            # Define objetivo principal
+            if primary_objective.upper() == 'FMAX':
+                model.setObjective(variables['FMAX'], GRB.MINIMIZE)
+            elif primary_objective.upper() == 'TFT':
+                model.setObjective(variables['TFT_expr'], GRB.MINIMIZE)
+            elif primary_objective.upper() == 'TS':
+                model.setObjective(variables['TS_expr'], GRB.MINIMIZE)
+            else:
+                raise ValueError("Primary objective must be 'FMAX', 'TFT', or 'TS'")
 
-                print(f" Numba: FMAX={makespan:.2f}, TFT={tft:.2f}, TS={ts:.2f} | Gurobi: FMAX={gurobi_fmax:.2f}, TFT={gurobi_tft:.2f}, TS={gurobi_ts:.2f}")
-                
-                # Usa os valores do Gurobi que são mais confiáveis
-                return {
-                    'FMAX': gurobi_fmax,
-                    'TFT': gurobi_tft,
-                    'TS': gurobi_ts,
-                    'job_assignment': job_assignment,
-                    'status': model.Status,
-                    'gap': model.MIPGap if hasattr(model, 'MIPGap') else 0.0,
-                    'verified_objectives': {'FMAX': makespan, 'TFT': tft, 'TS': ts},
-                    'iterations': model.IterCount if hasattr(model, 'IterCount') else 0,
-                    'iterations_node': model.NodeCount if hasattr(model, 'NodeCount') else 0,
-                    'number_of_solutions': model.SolCount if hasattr(model, 'SolCount') else 0
-                }
-            except Exception as e:
-                print(f"    Erro ao extrair solução: {e}")
-                return None
-        
-        return None
+            # Adiciona restrições epsilon
+            for obj_name, epsilon_val in epsilon_values.items():
+                if obj_name.upper() == 'FMAX':
+                    model.addConstr(variables['FMAX'] <= epsilon_val,
+                                   name=f"epsilon_{obj_name}")
+                elif obj_name.upper() == 'TFT':
+                    model.addConstr(variables['TFT_expr'] <= epsilon_val,
+                                   name=f"epsilon_{obj_name}")
+                elif obj_name.upper() == 'TS':
+                    model.addConstr(variables['TS_expr'] <= epsilon_val,
+                                   name=f"epsilon_{obj_name}")
+
+            model.optimize()
+
+            if model.Status in (GRB.OPTIMAL, GRB.TIME_LIMIT, GRB.SUBOPTIMAL):
+                try:
+                    # Extrai solução
+                    job_assignment = np.zeros((self.num_machines, self.num_jobs), dtype=np.int32)
+
+                    for j in self.J:
+                        for r in self.R:
+                            for m in self.M:
+                                if variables['x'][j, r, m].X > 0.5:
+                                    job_assignment[m-1, j-1] = 1
+
+                    # Valores dos objetivos do Gurobi
+                    gurobi_fmax = float(variables['FMAX'].X)
+                    gurobi_tft = float(variables['TFT_expr'].getValue())
+                    gurobi_ts = float(variables['TS_expr'].getValue())
+
+                    # Calcula objetivos usando Numba para verificação
+                    makespan, tft, ts = calculate_solution_objectives(
+                        job_assignment,
+                        self.tools_requirements_matrix,
+                        self.magazines_capacities,
+                        self.tool_change_costs,
+                        self.job_cost_per_machine
+                    )
+
+                    print(f" Numba: FMAX={makespan:.2f}, TFT={tft:.2f}, TS={ts:.2f} | Gurobi: FMAX={gurobi_fmax:.2f}, TFT={gurobi_tft:.2f}, TS={gurobi_ts:.2f}")
+
+                    # Usa os valores do Gurobi que são mais confiáveis
+                    return {
+                        'FMAX': gurobi_fmax,
+                        'TFT': gurobi_tft,
+                        'TS': gurobi_ts,
+                        'job_assignment': job_assignment,
+                        'status': int(model.Status),
+                        'gap': float(model.MIPGap) if hasattr(model, 'MIPGap') else 0.0,
+                        'verified_objectives': {'FMAX': float(makespan), 'TFT': float(tft), 'TS': float(ts)},
+                        'iterations': model.IterCount if hasattr(model, 'IterCount') else 0,
+                        'iterations_node': model.NodeCount if hasattr(model, 'NodeCount') else 0,
+                        'number_of_solutions': model.SolCount if hasattr(model, 'SolCount') else 0
+                    }
+                except Exception as e:
+                    print(f"    Erro ao extrair solução: {e}")
+                    return None
+
+            return None
+        finally:
+            # Libera memória nativa do Gurobi imediatamente após cada ponto
+            try:
+                model.dispose()
+            except Exception:
+                pass
 
     def generate_pareto_front_fast(self, num_points=8, selected_objectives=None):
         """
