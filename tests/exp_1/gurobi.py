@@ -17,7 +17,7 @@ SSP_NPM_I_PATH = os.path.join(BASE_DIR, "../../src/instances/SSP-NPM-I")
 
 # Configurações globais
 MAX_TIME_PER_PAIR = 3600  # 1 hora por par de objetivos (em segundos)
-START_INSTANCE_ID = 52  # Começa a partir da ins51 (inclusive)
+START_INSTANCE_ID = 55  # Começa a partir da ins51 (inclusive)
 OBJECTIVE_PAIRS = [
     ('TS', 'FMAX'),   # Tool Switches vs Makespan  
     ('TS', 'TFT'),    # Tool Switches vs Total Flow Time
